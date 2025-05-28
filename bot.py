@@ -6,14 +6,12 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import yt_dlp
 
-# --- Flask app ஹெல்த் செக் க்கு ---
 flask_app = Flask(__name__)
 
 @flask_app.route("/")
 def health():
-    return "Bot is running!"  # பாட்டி ஓடிக் கொண்டு இருக்கிறது!
+    return "Bot is running!"
 
-# --- Telegram Bot Handler ---
 async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = ' '.join(context.args)
 
@@ -24,7 +22,6 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',
-        # 'cookiefile': 'cookies.txt',  # தேவையானால் குக்கீஸ் கோப்பைப் பயன்படுத்தவும்
     }
 
     if not query.startswith("http"):
@@ -40,7 +37,6 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"பிழை: {e}")
 
-# --- Main bot function ---
 async def start_bot():
     token = os.getenv("BOT_TOKEN")
     if not token:
@@ -49,20 +45,17 @@ async def start_bot():
 
     app = ApplicationBuilder().token(token).build()
     app.add_handler(CommandHandler("play", play))
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-    await app.updater.idle()
 
-# --- நிகழ்ச்சி ஆரம்பம் ---
+    await app.run_polling()  # ✅ புதிய மற்றும் சரியான method
+
 if __name__ == "__main__":
-    # Flask ஐ பின்னணி துறையில் இயக்கவும்
+    # Flask ஹெல்த் செக்
     threading.Thread(
         target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))),
         daemon=True
     ).start()
 
-    # ஏற்கனவே ஓடும் event loop ஐ பயன்படுத்தவும்
+    # Telegram bot ஆரம்பிக்கவும்
     loop = asyncio.get_event_loop()
     loop.create_task(start_bot())
     loop.run_forever()
