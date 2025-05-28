@@ -1,0 +1,9 @@
+name: telegram-music-bot
+
+build:
+  commands:
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+
+run:
+  command: python bot.py
