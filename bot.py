@@ -1,39 +1,66 @@
-# bot.py
 import os
+from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import yt_dlp
+import asyncio
 
-TOKEN = os.environ["TELEGRAM_TOKEN"]
+# --- Flask app for Koyeb health check ---
+flask_app = Flask(__name__)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Send /play <YouTube link> to play music.")
+@flask_app.route("/")
+def health():
+    return "Bot is running"
 
+# --- Telegram Bot Handler ---
 async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Usage: /play <YouTube URL>")
+    query = ' '.join(context.args)
+    
+    if not query:
+        await update.message.reply_text("Please provide a search term or YouTube link.")
         return
-
-    url = context.args[0]
-    file_path = "song.mp3"
 
     ydl_opts = {
         'format': 'bestaudio/best',
-        'outtmpl': file_path,
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        # Uncomment this line and add cookies.txt if login is needed
+        # 'cookiefile': 'cookies.txt',
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+    # Use ytsearch if plain text is given
+    if not query.startswith("http"):
+        query = f"ytsearch:{query}"
 
-    await update.message.reply_audio(audio=open(file_path, 'rb'))
+    await update.message.reply_text("Downloading...")
 
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("play", play))
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(query, download=True)
+            title = info.get('title', 'Unknown')
+            await update.message.reply_text(f"Downloaded: {title}")
+    except Exception as e:
+        await update.message.reply_text(f"Failed to download: {str(e)}")
 
-app.run_polling()
+# --- Main Entry Point ---
+async def main():
+    token = os.getenv("BOT_TOKEN")
+    if not token:
+        print("BOT_TOKEN is missing in environment variables.")
+        return
+
+    application = ApplicationBuilder().token(token).build()
+    application.add_handler(CommandHandler("play", play))
+    await application.run_polling()
+
+if __name__ == "__main__":
+    import threading
+    import sys
+
+    # Start Flask server in a thread
+    threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))), daemon=True).start()
+
+    # Run Telegram bot
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        sys.exit(0)
