@@ -1,66 +1,68 @@
 import os
+import asyncio
+import threading
 from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import yt_dlp
-import asyncio
 
-# --- Flask app for Koyeb health check ---
+# --- Flask app ஹெல்த் செக் க்கு ---
 flask_app = Flask(__name__)
 
 @flask_app.route("/")
 def health():
-    return "Bot is running"
+    return "Bot is running!"  # பாட்டி ஓடிக் கொண்டு இருக்கிறது!
 
 # --- Telegram Bot Handler ---
 async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = ' '.join(context.args)
-    
+
     if not query:
-        await update.message.reply_text("Please provide a search term or YouTube link.")
+        await update.message.reply_text("தயவுசெய்து தேடல் சொல் அல்லது YouTube இணைப்பு கொடுக்கவும்.")
         return
 
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',
-        # Uncomment this line and add cookies.txt if login is needed
-        # 'cookiefile': 'cookies.txt',
+        # 'cookiefile': 'cookies.txt',  # தேவையானால் குக்கீஸ் கோப்பைப் பயன்படுத்தவும்
     }
 
-    # Use ytsearch if plain text is given
     if not query.startswith("http"):
         query = f"ytsearch:{query}"
 
-    await update.message.reply_text("Downloading...")
+    await update.message.reply_text("பதிவிறக்கம் நடக்கிறது...")
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(query, download=True)
-            title = info.get('title', 'Unknown')
-            await update.message.reply_text(f"Downloaded: {title}")
+            title = info.get('title', 'தெரியாதது')
+            await update.message.reply_text(f"பதிவிறக்கம் முடிந்தது: {title}")
     except Exception as e:
-        await update.message.reply_text(f"Failed to download: {str(e)}")
+        await update.message.reply_text(f"பிழை: {e}")
 
-# --- Main Entry Point ---
-async def main():
+# --- Main bot function ---
+async def start_bot():
     token = os.getenv("BOT_TOKEN")
     if not token:
-        print("BOT_TOKEN is missing in environment variables.")
+        print("BOT_TOKEN என்விரோன்மெண்ட் வெரியபிள் இல்லை.")
         return
 
-    application = ApplicationBuilder().token(token).build()
-    application.add_handler(CommandHandler("play", play))
-    await application.run_polling()
+    app = ApplicationBuilder().token(token).build()
+    app.add_handler(CommandHandler("play", play))
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    await app.updater.idle()
 
+# --- நிகழ்ச்சி ஆரம்பம் ---
 if __name__ == "__main__":
-    import threading
-    import sys
+    # Flask ஐ பின்னணி துறையில் இயக்கவும்
+    threading.Thread(
+        target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))),
+        daemon=True
+    ).start()
 
-    # Start Flask server in a thread
-    threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))), daemon=True).start()
-
-    # Run Telegram bot
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        sys.exit(0)
+    # ஏற்கனவே ஓடும் event loop ஐ பயன்படுத்தவும்
+    loop = asyncio.get_event_loop()
+    loop.create_task(start_bot())
+    loop.run_forever()
