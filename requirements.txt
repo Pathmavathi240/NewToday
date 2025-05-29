@@ -8,3 +8,4 @@ tgcrypto
 youtube-search-python==1.6.6
 flask
 youtube_dl
+Pillow
