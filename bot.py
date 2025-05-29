@@ -6,17 +6,17 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import yt_dlp
 
-# Create downloads directory if it doesn't exist
+# Create downloads directory
 os.makedirs("downloads", exist_ok=True)
 
-# Flask app for health check
+# Flask app for Koyeb health checks
 flask_app = Flask(__name__)
 
 @flask_app.route("/")
 def health():
     return "Bot is running!"
 
-# Telegram command handler
+# Telegram /play command
 async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = ' '.join(context.args)
 
@@ -27,51 +27,52 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'noplaylist': True,
+        'quiet': True
     }
 
     if not query.startswith("http"):
         query = f"ytsearch:{query}"
 
-    await update.message.reply_text("பதிவிறக்கம் நடக்கிறது...")
+    await update.message.reply_text("🎵 பாடல் பதிவிறக்கம் நடக்கிறது...")
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(query, download=True)
-            title = info.get('title', 'தெரியாதது')
-            await update.message.reply_text(f"பதிவிறக்கம் முடிந்தது: {title}")
-    except Exception as e:
-        await update.message.reply_text(f"பிழை: {e}")
+            file_path = ydl.prepare_filename(info)
+            title = info.get("title", "Unknown")
+            duration = info.get("duration", 0)
 
-# Telegram bot startup
+        await update.message.reply_audio(
+            audio=open(file_path, 'rb'),
+            title=title,
+            duration=duration
+        )
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ பிழை ஏற்பட்டது: {str(e)}")
+
+# Start Telegram bot
 async def run_bot():
     token = os.getenv("BOT_TOKEN")
     if not token:
-        print("BOT_TOKEN environment variable missing.")
+        print("❌ BOT_TOKEN environment variable not set.")
         return
 
     app = ApplicationBuilder().token(token).build()
     app.add_handler(CommandHandler("play", play))
 
-    try:
-        await app.initialize()
-        await app.start()
-        print("Bot started...")
-        await app.updater.start_polling()
-    except asyncio.CancelledError:
-        print("Shutdown signal received. Cleaning up...")
-        await app.updater.stop()
-        await app.stop()
-        await app.shutdown()
+    print("✅ Telegram bot started.")
+    await app.run_polling()
 
-# Entry point
+# Combined entry point
 def start():
-    # Start Flask in background
+    # Start Flask server in background (for Koyeb health checks)
     threading.Thread(
         target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))),
         daemon=True
     ).start()
 
-    # Start bot in main async loop
+    # Start Telegram bot using asyncio loop
     asyncio.run(run_bot())
 
 if __name__ == "__main__":
