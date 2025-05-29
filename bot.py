@@ -6,12 +6,17 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import yt_dlp
 
+# Create downloads directory if it doesn't exist
+os.makedirs("downloads", exist_ok=True)
+
+# Flask app for health check
 flask_app = Flask(__name__)
 
 @flask_app.route("/")
 def health():
     return "Bot is running!"
 
+# Telegram command handler
 async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = ' '.join(context.args)
 
@@ -37,30 +42,36 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"பிழை: {e}")
 
+# Telegram bot startup
 async def run_bot():
     token = os.getenv("BOT_TOKEN")
     if not token:
-        print("BOT_TOKEN என்விரோன்மெண்ட் வெரியபிள் இல்லை.")
+        print("BOT_TOKEN environment variable missing.")
         return
 
     app = ApplicationBuilder().token(token).build()
     app.add_handler(CommandHandler("play", play))
 
-    # Don't await this if inside a running loop
-    await app.initialize()
-    await app.start()
-    print("Bot started...")
-    await app.updater.start_polling()
-    # Don't await app.stop() or app.shutdown() unless explicitly stopping
+    try:
+        await app.initialize()
+        await app.start()
+        print("Bot started...")
+        await app.updater.start_polling()
+    except asyncio.CancelledError:
+        print("Shutdown signal received. Cleaning up...")
+        await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
 
+# Entry point
 def start():
-    # Start Flask server on a separate thread
+    # Start Flask in background
     threading.Thread(
         target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))),
         daemon=True
     ).start()
 
-    # Start asyncio event loop
+    # Start bot in main async loop
     asyncio.run(run_bot())
 
 if __name__ == "__main__":
