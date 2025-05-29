@@ -37,7 +37,7 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"பிழை: {e}")
 
-async def start_bot():
+async def run_bot():
     token = os.getenv("BOT_TOKEN")
     if not token:
         print("BOT_TOKEN என்விரோன்மெண்ட் வெரியபிள் இல்லை.")
@@ -46,16 +46,22 @@ async def start_bot():
     app = ApplicationBuilder().token(token).build()
     app.add_handler(CommandHandler("play", play))
 
-    await app.run_polling()  # ✅ புதிய மற்றும் சரியான method
+    # Don't await this if inside a running loop
+    await app.initialize()
+    await app.start()
+    print("Bot started...")
+    await app.updater.start_polling()
+    # Don't await app.stop() or app.shutdown() unless explicitly stopping
 
-if __name__ == "__main__":
-    # Flask ஹெல்த் செக்
+def start():
+    # Start Flask server on a separate thread
     threading.Thread(
         target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))),
         daemon=True
     ).start()
 
-    # Telegram bot ஆரம்பிக்கவும்
-    loop = asyncio.get_event_loop()
-    loop.create_task(start_bot())
-    loop.run_forever()
+    # Start asyncio event loop
+    asyncio.run(run_bot())
+
+if __name__ == "__main__":
+    start()
