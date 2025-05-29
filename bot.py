@@ -29,10 +29,11 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     ydl_opts = {
-    'format': 'bestaudio/best',
-    'outtmpl': 'downloads/%(title)s.%(ext)s',
-    'quiet': True,
-    'cookiefile': 'youtube_cookies.txt',  # ← ADD THIS LINE
+        'format': 'bestaudio/best',
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'quiet': True,
+        'cookiefile':
+    'youtube_cookies.txt',  # ← ADD THIS LINE
     }
 
     if not query.startswith("http"):
