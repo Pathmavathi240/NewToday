@@ -1,86 +1,86 @@
 import os
-import asyncio
-import threading
-from flask import Flask
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import logging
 import yt_dlp
-import nest_asyncio
+from flask import Flask, request
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    ContextTypes, filters
+)
 
-# Patch nested event loop support
-nest_asyncio.apply()
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Create downloads directory
-os.makedirs("downloads", exist_ok=True)
+TOKEN = os.getenv("BOT_TOKEN")
+PORT = int(os.getenv("PORT", "8080"))
+APP_URL = os.getenv("APP_URL")  # e.g. https://your-koyeb-app.koyeb.app
 
-# Flask app for Koyeb health checks
-flask_app = Flask(__name__)
+app = Flask(__name__)
 
-@flask_app.route("/")
-def health():
-    return "Bot is running!"
+# Create the Telegram bot application
+telegram_app = ApplicationBuilder().token(TOKEN).build()
 
-# Telegram /play command
-async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = ' '.join(context.args)
+# /start handler
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🎵 Send me the name of a song, and I'll fetch it from YouTube!")
 
-    if not query:
-        await update.message.reply_text("தயவுசெய்து தேடல் சொல் அல்லது YouTube இணைப்பு கொடுக்கவும்.")
-        return
-
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': 'downloads/%(title)s.%(ext)s',
-        'quiet': True,
-        'cookiefile':
-    'youtube_cookies.txt',  # ← ADD THIS LINE
-    }
-
-    if not query.startswith("http"):
-        query = f"ytsearch:{query}"
-
-    await update.message.reply_text("🎵 பாடல் பதிவிறக்கம் நடக்கிறது...")
+# Main message handler
+async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.message.text
+    msg = await update.message.reply_text("🔍 Searching...")
 
     try:
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "noplaylist": True,
+            "quiet": True,
+            "outtmpl": "downloads/%(title)s.%(ext)s",
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }],
+        }
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(query, download=True)
-            file_path = ydl.prepare_filename(info)
-            title = info.get("title", "Unknown")
-            duration = info.get("duration", 0)
+            info = ydl.extract_info(f"ytsearch:{query}", download=False)["entries"][0]
+            title = info["title"]
+            url = info["webpage_url"]
+            await msg.edit_text(f"🎧 Downloading: {title}")
 
-        await update.message.reply_audio(
-            audio=open(file_path, 'rb'),
-            title=title,
-            duration=duration
-        )
+            ydl.download([url])
+            file_path = ydl.prepare_filename(info).replace(".webm", ".mp3").replace(".m4a", ".mp3")
+
+        await update.message.reply_audio(audio=open(file_path, "rb"), title=title)
+        os.remove(file_path)
+
     except Exception as e:
-        await update.message.reply_text(f"⚠️ பிழை: {str(e)}")
+        logger.error(e)
+        await msg.edit_text("❌ Failed to fetch audio. Try again.")
 
-# Telegram bot startup
-async def run_bot():
-    token = os.getenv("BOT_TOKEN")
-    if not token:
-        print("❌ BOT_TOKEN environment variable not set.")
-        return
+# Telegram handlers
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_music))
 
-    app = ApplicationBuilder().token(token).build()
-    app.add_handler(CommandHandler("play", play))
+# Flask route for webhook
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+    telegram_app.update_queue.put_nowait(update)
+    return "ok"
 
-    print("✅ Telegram bot started.")
-    await app.run_polling()
+@app.route("/")
+def index():
+    return "Bot is alive!"
 
-# Entry point
-def start():
-    # Start Flask server for health check
-    threading.Thread(
-        target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))),
-        daemon=True
-    ).start()
-
-    # Reuse existing loop
-    loop = asyncio.get_event_loop()
-    loop.create_task(run_bot())
-    loop.run_forever()
+# Set webhook on startup
+async def set_webhook():
+    await telegram_app.bot.set_webhook(f"{APP_URL}/{TOKEN}")
 
 if __name__ == "__main__":
-    start()
+    import asyncio
+
+    asyncio.run(set_webhook())
+    telegram_app.run_polling()  # Optional if using polling
+    app.run(host="0.0.0.0", port=PORT)
