@@ -7,3 +7,4 @@ pyrogram==2.0.106
 tgcrypto
 youtube-search-python==1.6.6
 flask
+youtube_dl
