@@ -5,6 +5,10 @@ from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import yt_dlp
+import nest_asyncio
+
+# Patch nested event loop support
+nest_asyncio.apply()
 
 # Create downloads directory
 os.makedirs("downloads", exist_ok=True)
@@ -49,9 +53,9 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
             duration=duration
         )
     except Exception as e:
-        await update.message.reply_text(f"⚠️ பிழை ஏற்பட்டது: {str(e)}")
+        await update.message.reply_text(f"⚠️ பிழை: {str(e)}")
 
-# Start Telegram bot
+# Telegram bot startup
 async def run_bot():
     token = os.getenv("BOT_TOKEN")
     if not token:
@@ -64,16 +68,18 @@ async def run_bot():
     print("✅ Telegram bot started.")
     await app.run_polling()
 
-# Combined entry point
+# Entry point
 def start():
-    # Start Flask server in background (for Koyeb health checks)
+    # Start Flask server for health check
     threading.Thread(
         target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))),
         daemon=True
     ).start()
 
-    # Start Telegram bot using asyncio loop
-    asyncio.run(run_bot())
+    # Reuse existing loop
+    loop = asyncio.get_event_loop()
+    loop.create_task(run_bot())
+    loop.run_forever()
 
 if __name__ == "__main__":
     start()
