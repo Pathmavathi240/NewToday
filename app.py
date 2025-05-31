@@ -46,7 +46,7 @@ API_HASH = os.environ["API_HASH"]
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 
 bot = Client(
-    "tgmusicbot",
+    "tgmusicbot.session",  # 🛑 Save session to file
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN
@@ -54,14 +54,13 @@ bot = Client(
 
 main_filter = filters.text & filters.chat(MUSIC_CHATS) & filters.incoming
 
-# ✅ NEW: /start command handler
 @bot.on_message(filters.command("start") & (filters.private | filters.chat(MUSIC_CHATS)))
 async def start_command(_, message: Message):
     await message.reply_text(
-        "👋 Hello! I'm a Telegram Music Bot.\n\n"
-        "🎵 Send a YouTube/SoundCloud/Mixcloud link "
-        "and I’ll download the audio for you.\n\n"
-        "💬 This works in approved groups and private chat!"
+        "👋 வணக்கம்! நான் ஒரு Telegram இசை போட்.\n\n"
+        "🎵 YouTube / SoundCloud / Mixcloud இணைப்பை அனுப்புங்கள், "
+        "நான் அதை audio ஆக பதிவிறக்கம் செய்கிறேன்.\n\n"
+        "💬 இது group மற்றும் private chat-இல் வேலை செய்கிறது!"
     )
 
 @bot.on_message(main_filter & filters.regex("^/ping$"))
