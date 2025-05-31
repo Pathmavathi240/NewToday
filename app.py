@@ -17,7 +17,7 @@ app = Flask(__name__)
 def home():
     return "✅ Telegram Music Bot is running!"
 
-# --- Telegram Bot Logic ---
+# --- Telegram Bot Logic Starts Here ---
 MUSIC_MAX_LENGTH = 10800
 DELAY_DELETE_INFORM = 10
 TG_THUMB_MAX_LENGTH = 320
@@ -53,6 +53,14 @@ bot = Client(
 )
 
 main_filter = filters.text & filters.chat(MUSIC_CHATS) & filters.incoming
+
+@bot.on_message(filters.command("start") & (filters.private | filters.chat(MUSIC_CHATS)))
+async def start_command(_, message: Message):
+    await message.reply_text(
+        "👋 Hello! I'm a Telegram Music Bot.\n"
+        "Send me a YouTube/SoundCloud/Mixcloud music link "
+        "in a supported group or reply to a message to download."
+    )
 
 @bot.on_message(main_filter & filters.regex("^/ping$"))
 async def ping_pong(_, message):
@@ -117,7 +125,7 @@ async def _reply_and_delete_later(message: Message, text: str, delay: int):
     await reply.delete()
 
 async def _upload_audio(message: Message, info_dict, audio_file):
-    basename = audio_file.rsplit(".", 1)[0]
+    basename = audio_file.rsplit(".", 1)[-2]
     if info_dict['ext'] == 'webm':
         audio_file_opus = basename + ".opus"
         ffmpeg.input(audio_file).output(audio_file_opus, codec="copy").run()
@@ -170,18 +178,22 @@ def _crop_to_square(img):
     bottom = (height + length) / 2
     return img.crop((left, top, right, bottom))
 
-# --- Start Bot in Main Thread & Flask in Background ---
-def run_flask():
+# --- Start Bot and Web Server Together ---
+def run():
+    async def start_bot():
+        await bot.start()
+        print(">>> BOT STARTED")
+        await idle()
+        await bot.stop()
+        print(">>> BOT STOPPED")
+
+    # Run bot in main thread to avoid signal issues
+    asyncio.get_event_loop().create_task(start_bot())
+
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
-async def start_bot():
-    await bot.start()
-    print(">>> BOT STARTED")
-    await idle()
-    await bot.stop()
-    print(">>> BOT STOPPED")
-
 if __name__ == "__main__":
-    threading.Thread(target=run_flask).start()
-    asyncio.run(start_bot())
+    asyncio.run(bot.start())  # start bot first
+    print(">>> BOT STARTED")
+    run()
