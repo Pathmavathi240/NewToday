@@ -17,7 +17,7 @@ app = Flask(__name__)
 def home():
     return "✅ Telegram Music Bot is running!"
 
-# --- Telegram Bot Logic Starts Here ---
+# --- Telegram Bot Logic ---
 MUSIC_MAX_LENGTH = 10800
 DELAY_DELETE_INFORM = 10
 TG_THUMB_MAX_LENGTH = 320
@@ -117,7 +117,7 @@ async def _reply_and_delete_later(message: Message, text: str, delay: int):
     await reply.delete()
 
 async def _upload_audio(message: Message, info_dict, audio_file):
-    basename = audio_file.rsplit(".", 1)[-2]
+    basename = audio_file.rsplit(".", 1)[0]
     if info_dict['ext'] == 'webm':
         audio_file_opus = basename + ".opus"
         ffmpeg.input(audio_file).output(audio_file_opus, codec="copy").run()
@@ -170,19 +170,18 @@ def _crop_to_square(img):
     bottom = (height + length) / 2
     return img.crop((left, top, right, bottom))
 
-# --- Start Bot and Web Server Together ---
-def run():
-    async def start_bot():
-        await bot.start()
-        print(">>> BOT STARTED")
-        await idle()
-        await bot.stop()
-        print(">>> BOT STOPPED")
-
-    threading.Thread(target=lambda: asyncio.run(start_bot())).start()
-
+# --- Start Bot in Main Thread & Flask in Background ---
+def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
+async def start_bot():
+    await bot.start()
+    print(">>> BOT STARTED")
+    await idle()
+    await bot.stop()
+    print(">>> BOT STOPPED")
+
 if __name__ == "__main__":
-    run()
+    threading.Thread(target=run_flask).start()
+    asyncio.run(start_bot())
